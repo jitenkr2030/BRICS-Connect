@@ -1,0 +1,1203 @@
+// BRICS Connect Platform Schema
+// Supports multi-currency wallet, B2B marketplace, and education platform
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// User Management with KYC
+model User {
+  id                String   @id @default(cuid())
+  email             String   @unique
+  name              String?
+  avatar            String?
+  phone             String?
+  country           String?  // BRICS country code
+  businessType      String?  // SME, FREELANCER, STUDENT, ENTERPRISE
+  kycStatus         String   @default("PENDING") // PENDING, VERIFIED, REJECTED
+  kycDocuments      String?  // JSON array of document URLs
+  isVerified        Boolean  @default(false)
+  verificationLevel Int      @default(0) // 0-3 verification levels
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  // Relations
+  wallets           Wallet[]
+  marketplaceListings MarketplaceListing[]
+  marketplaceOrders    MarketplaceOrder[]
+  enrollments          CourseEnrollment[]
+  certificates         Certificate[]
+  reviews              Review[]
+  notifications        Notification[]
+  sessions             UserSession[]
+  adminRole            AdminUser?
+  reports              ContentReport[]
+  subscriptions        UserSubscription[]
+  invoices             Invoice[]
+  transactionFees      TransactionFee[]
+  usageMetrics         UsageMetric[]
+  analyticsPurchases   AnalyticsPurchase[]
+  aiServiceUsage       AIServiceUsage[]
+  courseProgress       CourseProgress[]
+  courseBookmarks      CourseBookmark[]
+  communityPosts       CommunityPost[]
+  communityComments    CommunityComment[]
+  communityVotes       CommunityVote[]
+  contributions        UserContribution[]
+  createdStudyGroups   StudyGroup[]
+  studyGroupMembers    StudyGroupMember[]
+  hostedSessions       StudySession[]
+  sessionAttendances   StudySessionAttendee[]
+  
+  // Language Learning Relations
+  languageEnrollments   LanguageEnrollment[]
+  languageProgress      LanguageProgress[]
+  languageCertificates  LanguageCertificate[]
+  languageAttempts      LanguageAttempt[]
+
+  @@map("users")
+}
+
+// Multi-Currency Wallet System
+model Wallet {
+  id          String   @id @default(cuid())
+  userId      String
+  currency    String   // INR, CNY, BRL, RUB, ZAR, CBDC
+  balance     Decimal  @default(0.00)
+  frozenBalance Decimal @default(0.00) // For pending transactions
+  walletType  String   @default("STANDARD") // STANDARD, INTEREST_BEARING
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions Transaction[]
+  cards       PaymentCard[]
+
+  @@unique([userId, currency])
+  @@map("wallets")
+}
+
+// Payment Cards (QR/NFC)
+model PaymentCard {
+  id           String   @id @default(cuid())
+  walletId     String
+  cardType     String   // QR, NFC, VIRTUAL
+  cardNumber   String?  // Masked number
+  qrCode       String?  // Base64 encoded QR
+  isActive     Boolean  @default(true)
+  dailyLimit   Decimal  @default(0.00)
+  monthlyLimit Decimal  @default(0.00)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  wallet       Wallet   @relation(fields: [walletId], references: [id], onDelete: Cascade)
+
+  @@map("payment_cards")
+}
+
+// Transaction Records
+model Transaction {
+  id              String   @id @default(cuid())
+  walletId        String
+  type            String   // SEND, RECEIVE, PAYMENT, REFUND
+  amount          Decimal
+  currency        String
+  fee             Decimal  @default(0.00)
+  description     String?
+  referenceId     String?  // Order ID, Course ID, etc.
+  status          String   @default("PENDING") // PENDING, COMPLETED, FAILED, CANCELLED
+  blockchainTx   String?  // Blockchain transaction hash
+  metadata        String?  // JSON for additional data
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  wallet          Wallet   @relation(fields: [walletId], references: [id], onDelete: Cascade)
+
+  @@map("transactions")
+}
+
+// B2B Marketplace
+model MarketplaceListing {
+  id              String   @id @default(cuid())
+  sellerId        String
+  title           String
+  description     String
+  category        String
+  subcategory     String?
+  price           Decimal
+  currency        String
+  quantity        Int
+  minOrder        Int      @default(1)
+  images          String?  // JSON array of image URLs
+  specifications  String?  // JSON for product specs
+  shippingInfo    String?  // JSON for shipping details
+  status          String   @default("ACTIVE") // ACTIVE, INACTIVE, SOLD
+  viewCount       Int      @default(0)
+  rating          Decimal  @default(0.00)
+  reviewCount     Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  seller          User     @relation(fields: [sellerId], references: [id])
+  orders          MarketplaceOrder[]
+  reviews         Review[]
+
+  @@map("marketplace_listings")
+}
+
+model MarketplaceOrder {
+  id              String   @id @default(cuid())
+  buyerId         String
+  listingId       String
+  quantity        Int
+  unitPrice       Decimal
+  totalPrice      Decimal
+  currency        String
+  status          String   @default("PENDING") // PENDING, PAID, SHIPPED, DELIVERED, CANCELLED, REFUNDED
+  paymentStatus   String   @default("PENDING") // PENDING, PAID, REFUNDED
+  shippingAddress String?  // JSON
+  trackingNumber  String?
+  notes           String?
+  smartContract   String?  // Smart contract address
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  buyer           User     @relation(fields: [buyerId], references: [id])
+  listing         MarketplaceListing @relation(fields: [listingId], references: [id])
+
+  @@map("marketplace_orders")
+}
+
+// Education Platform - Enhanced for BRICS Course Blueprint
+model Course {
+  id              String   @id @default(cuid())
+  title           String
+  description     String
+  instructor      String
+  category        String
+  subcategory     String?
+  level           String   // BEGINNER, INTERMEDIATE, ADVANCED
+  courseLevel     String   @default("FOUNDATION") // LEVEL_1_FREE, LEVEL_2_FOUNDATION, LEVEL_3_PRACTICAL, LEVEL_4_ADVANCED, COMMUNITY, CERTIFICATION
+  language        String   @default("en") // Primary language code
+  languages       String?  // JSON array of available languages
+  duration        Int      // Duration in minutes
+  price           Decimal  @default(0.00)
+  currency        String   @default("INR")
+  originalPrice   Decimal? // Original price for discount display
+  priceTier       String   @default("FREE") // FREE, TIER_1, TIER_2, TIER_3, TIER_4
+  thumbnail       String?
+  videoUrl        String?
+  previewUrl      String?  // Preview video URL
+  materials       String?  // JSON array of resource URLs
+  prerequisites   String?  // JSON
+  learningObjectives String? // JSON
+  targetAudience  String?  // JSON array of target audiences
+  keyTopics       String?  // JSON array of main topics
+  modules         String?  // JSON array of course modules
+  outcomes        String?  // JSON array of learning outcomes
+  status          String   @default("DRAFT") // DRAFT, ACTIVE, INACTIVE, ARCHIVED
+  isFeatured      Boolean  @default(false)
+  isCertificate   Boolean  @default(false)
+  certificateType String?  // COMPLETION, ACHIEVEMENT, PROFESSIONAL
+  rating          Decimal  @default(0.00)
+  reviewCount     Int      @default(0)
+  enrollmentCount Int      @default(0)
+  completionRate  Decimal  @default(0.00)
+  viewCount       Int      @default(0)
+  tags            String?  // JSON array of tags
+  difficulty      String   @default("BEGINNER") // BEGINNER, INTERMEDIATE, ADVANCED
+  estimatedHours  Int?     // Estimated completion time in hours
+  accessType      String   @default("LIFETIME") // LIFETIME, SUBSCRIPTION, RENTAL
+  maxEnrollments  Int?     // Maximum enrollment limit
+  currentEnrollments Int   @default(0)
+  prerequisitesCourses String? // JSON array of course IDs
+  relatedCourses  String?  // JSON array of related course IDs
+  instructorBio   String?
+  instructorAvatar String?
+  instructorTitle  String?
+  faq             String?  // JSON array of FAQs
+  reviewsEnabled  Boolean  @default(true)
+  discussionsEnabled Boolean @default(true)
+  certificateEnabled Boolean @default(false)
+  autoApprove     Boolean  @default(true)
+  publishedAt     DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  enrollments     CourseEnrollment[]
+  certificates    Certificate[]
+  reviews         Review[]
+  chapters        CourseChapter[]
+  progress        CourseProgress[]
+  bookmarks       CourseBookmark[]
+  communityPosts  CommunityPost[]
+  contributions   UserContribution[]
+  studyGroups     StudyGroup[]
+
+  @@map("courses")
+}
+
+model CourseEnrollment {
+  id              String   @id @default(cuid())
+  userId          String
+  courseId        String
+  progress        Int      @default(0) // Progress percentage
+  status          String   @default("ACTIVE") // ACTIVE, COMPLETED, DROPPED
+  startedAt       DateTime @default(now())
+  completedAt     DateTime?
+  lastAccessedAt  DateTime @default(now())
+  paymentStatus   String   @default("PAID") // PAID, PENDING, REFUNDED
+  amountPaid      Decimal
+  currency        String
+
+  user            User     @relation(fields: [userId], references: [id])
+  course          Course   @relation(fields: [courseId], references: [id])
+  certificate     Certificate?
+  courseProgress  CourseProgress[]
+  bookmarks       CourseBookmark[]
+
+  @@unique([userId, courseId])
+  @@map("course_enrollments")
+}
+
+model Certificate {
+  id              String   @id @default(cuid())
+  userId          String
+  courseId        String
+  enrollmentId    String   @unique
+  certificateUrl  String
+  issuedAt        DateTime @default(now())
+  expiresAt       DateTime?
+  verificationCode String @unique
+  certificateType String?  // COMPLETION, ACHIEVEMENT, PROFESSIONAL
+  metadata        String? // JSON with additional certificate data
+
+  user            User     @relation(fields: [userId], references: [id])
+  course          Course   @relation(fields: [courseId], references: [id])
+  enrollment      CourseEnrollment @relation(fields: [enrollmentId], references: [id])
+
+  @@map("certificates")
+}
+
+// Course Chapters/Modules
+model CourseChapter {
+  id              String   @id @default(cuid())
+  courseId        String
+  title           String
+  description     String?
+  contentType     String   // VIDEO, TEXT, QUIZ, ASSIGNMENT, DOWNLOAD
+  contentUrl      String?  // URL to video, text, or other content
+  duration        Int?     // Duration in minutes
+  order           Int      // Chapter order within course
+  isPreview       Boolean  @default(false) // Free preview chapter
+  isRequired      Boolean  @default(true) // Required for completion
+  materials       String?  // JSON array of additional resources
+  quizQuestions  String?  // JSON array of quiz questions
+  assignmentData  String?  // JSON with assignment details
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  course          Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  progress        CourseProgress[]
+  bookmarks       CourseBookmark[]
+
+  @@map("course_chapters")
+}
+
+// Course Progress Tracking
+model CourseProgress {
+  id              String   @id @default(cuid())
+  userId          String
+  courseId        String
+  chapterId       String?
+  enrollmentId    String
+  status          String   @default("NOT_STARTED") // NOT_STARTED, IN_PROGRESS, COMPLETED
+  progress        Int      @default(0) // Progress percentage for chapter/course
+  timeSpent       Int      @default(0) // Time spent in minutes
+  lastPosition    Int?     // Last video position or reading position
+  notes           String?  // User notes
+  completedAt     DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course          Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  chapter         CourseChapter? @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+  enrollment      CourseEnrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, courseId, chapterId])
+  @@map("course_progress")
+}
+
+// Course Bookmarks
+model CourseBookmark {
+  id              String   @id @default(cuid())
+  userId          String
+  courseId        String
+  chapterId       String?
+  enrollmentId    String
+  bookmarkType    String   // NOTE, HIGHLIGHT, BOOKMARK
+  content         String?  // Bookmarked content or note
+  timestamp       Int?     // Video timestamp or reading position
+  tags            String?  // JSON array of tags
+  isPrivate       Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course          Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  chapter         CourseChapter? @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+  enrollment      CourseEnrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+
+  @@map("course_bookmarks")
+}
+
+// Reviews and Ratings
+model Review {
+  id              String   @id @default(cuid())
+  userId          String
+  targetType     String   // COURSE, LISTING
+  targetId        String
+  rating          Int      // 1-5 stars
+  comment         String?
+  isVerified      Boolean  @default(false)
+  helpfulCount   Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user            User     @relation(fields: [userId], references: [id])
+  course          Course?  @relation(fields: [targetId], references: [id])
+  listing         MarketplaceListing? @relation(fields: [targetId], references: [id])
+
+  @@unique([userId, targetType, targetId])
+  @@map("reviews")
+}
+
+// Notifications
+model Notification {
+  id              String   @id @default(cuid())
+  userId          String
+  type            String   // PAYMENT, ORDER, COURSE, SYSTEM
+  title           String
+  message         String
+  data            String?  // JSON for additional data
+  isRead          Boolean  @default(false)
+  actionUrl       String?
+  createdAt       DateTime @default(now())
+
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notifications")
+}
+
+// User Sessions for Authentication
+model UserSession {
+  id              String   @id @default(cuid())
+  userId          String
+  token           String   @unique
+  refreshToken    String?  @unique
+  deviceInfo      String?  // JSON
+  ipAddress       String?
+  userAgent       String?
+  isActive        Boolean  @default(true)
+  expiresAt       DateTime
+  createdAt       DateTime @default(now())
+
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_sessions")
+}
+
+// Admin User Management
+model AdminUser {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  role      String   @default("ADMIN") // SUPER_ADMIN, ADMIN, MODERATOR, SUPPORT
+  level     Int      @default(1) // 1-5 access levels
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  actions   AdminAction[]
+  reviews    ContentReport[]
+
+  @@map("admin_users")
+}
+
+// Admin Action Logs
+model AdminAction {
+  id          String   @id @default(cuid())
+  adminUserId  String
+  actionType  String   // USER_BAN, LISTING_REMOVE, COURSE_APPROVE, etc.
+  targetId    String?  // ID of affected entity
+  targetType  String?  // USER, LISTING, COURSE, etc.
+  description String
+  metadata    String?  // JSON with additional context
+  ipAddress   String?
+  userAgent   String?
+  createdAt   DateTime @default(now())
+
+  adminUser   AdminUser @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
+
+  @@map("admin_actions")
+}
+
+// Platform Settings
+model PlatformSetting {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  value       String
+  category    String   // SECURITY, PAYMENT, MARKETPLACE, EDUCATION, GENERAL
+  description String?
+  isPublic    Boolean  @default(false) // Can users see this setting
+  updatedBy   String?  // Admin user ID
+  updatedAt   DateTime @updatedAt
+  createdAt   DateTime @default(now())
+
+  @@map("platform_settings")
+}
+
+// Platform Analytics
+model PlatformAnalytics {
+  id              String   @id @default(cuid())
+  date            DateTime @default(now())
+  metricType      String   // USERS, TRANSACTIONS, LISTINGS, COURSES, REVENUE
+  metricValue     Float
+  metricData      String?  // JSON with breakdown data
+  period          String   @default("DAILY") // DAILY, WEEKLY, MONTHLY
+
+  @@map("platform_analytics")
+}
+
+// System Notifications
+model SystemNotification {
+  id          String   @id @default(cuid())
+  title       String
+  message     String
+  type        String   // INFO, WARNING, ERROR, MAINTENANCE
+  targetRole  String?  // ALL, USERS, SELLERS, BUYERS, etc.
+  isActive    Boolean  @default(true)
+  expiresAt   DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("system_notifications")
+}
+
+// Content Reports
+model ContentReport {
+  id          String   @id @default(cuid())
+  reporterId  String
+  targetType  String   // LISTING, COURSE, USER, REVIEW
+  targetId    String
+  reason      String   // INAPPROPRIATE, FRAUD, SPAM, COPYRIGHT, etc.
+  description String
+  status      String   @default("PENDING") // PENDING, REVIEWING, RESOLVED, DISMISSED
+  metadata    String?  // JSON with additional context
+  reviewedBy   String?  // Admin user ID
+  reviewedAt   DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  reporter    User     @relation(fields: [reporterId], references: [id])
+  reviewer    AdminUser? @relation(fields: [reviewedBy], references: [id])
+
+  @@map("content_reports")
+}
+
+// Revenue Tracking
+model RevenueRecord {
+  id          String   @id @default(cuid())
+  source      String   // TRANSACTION_FEE, MARKETPLACE_COMMISSION, COURSE_SALE, SUBSCRIPTION
+  amount      Decimal
+  currency    String
+  description String?
+  metadata    String?  // JSON with additional context
+  date        DateTime @default(now())
+
+  @@map("revenue_records")
+}
+
+// API Rate Limiting
+model RateLimit {
+  id        String   @id @default(cuid())
+  identifier String   // IP address or user ID
+  endpoint   String
+  requests  Int      @default(1)
+  windowStart DateTime @default(now())
+  windowEnd  DateTime
+  isActive   Boolean  @default(true)
+
+  @@map("rate_limits")
+}
+
+// ==================== MONETIZATION MODELS ====================
+
+// Subscription Plans
+model SubscriptionPlan {
+  id              String   @id @default(cuid())
+  name            String   @unique
+  description     String
+  type            String   // WALLET_PREMIUM, MARKETPLACE_PRO, EDUCATION_PLUS, ENTERPRISE
+  price           Decimal
+  currency        String   @default("USD")
+  billingCycle    String   // MONTHLY, YEARLY
+  features        String   // JSON array of features
+  limits          String?  // JSON with usage limits
+  isActive        Boolean  @default(true)
+  sortOrder       Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  subscriptions   UserSubscription[]
+  enterprisePlans EnterpriseSubscription[]
+
+  @@map("subscription_plans")
+}
+
+// User Subscriptions
+model UserSubscription {
+  id              String   @id @default(cuid())
+  userId          String
+  planId          String
+  status          String   @default("ACTIVE") // ACTIVE, CANCELLED, EXPIRED, SUSPENDED
+  startDate       DateTime @default(now())
+  endDate         DateTime?
+  nextBillingDate DateTime?
+  autoRenew       Boolean  @default(true)
+  paymentMethod   String?  // CARD, BANK_TRANSFER, CRYPTO
+  lastPaymentAt   DateTime?
+  cancellationAt  DateTime?
+  cancelledReason String?
+  metadata        String?  // JSON with additional data
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan            SubscriptionPlan @relation(fields: [planId], references: [id])
+  invoices        Invoice[]
+
+  @@unique([userId, planId])
+  @@map("user_subscriptions")
+}
+
+// Enterprise Subscriptions
+model EnterpriseSubscription {
+  id              String   @id @default(cuid())
+  companyId       String
+  planId          String
+  companyName     String
+  contactEmail    String
+  contactPhone    String?
+  status          String   @default("ACTIVE") // ACTIVE, CANCELLED, EXPIRED, SUSPENDED
+  startDate       DateTime @default(now())
+  endDate         DateTime?
+  nextBillingDate DateTime?
+  autoRenew       Boolean  @default(true)
+  contractTerms   String?  // JSON with contract terms
+  customFeatures  String?  // JSON with custom features
+  userLimit       Int?     // Number of allowed users
+  currentUsers    Int      @default(0)
+  metadata        String?  // JSON with additional data
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  plan            SubscriptionPlan @relation(fields: [planId], references: [id])
+  invoices        Invoice[]
+
+  @@map("enterprise_subscriptions")
+}
+
+// Invoices and Billing
+model Invoice {
+  id              String   @id @default(cuid())
+  invoiceNumber   String   @unique
+  userId          String?
+  enterpriseId    String?
+  subscriptionId  String?
+  type            String   // SUBSCRIPTION, TRANSACTION_FEE, MARKETPLACE_COMMISSION, COURSE_SALE, ENTERPRISE
+  amount          Decimal
+  currency        String
+  taxAmount       Decimal  @default(0.00)
+  totalAmount     Decimal
+  status          String   @default("PENDING") // PENDING, PAID, OVERDUE, CANCELLED, REFUNDED
+  dueDate         DateTime
+  paidAt          DateTime?
+  paymentMethod   String?  // CARD, BANK_TRANSFER, CRYPTO, WALLET
+  description     String?
+  lineItems       String   // JSON with invoice line items
+  metadata        String?  // JSON with additional data
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user            User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userSubscription UserSubscription? @relation(fields: [subscriptionId], references: [id])
+  enterpriseSubscription EnterpriseSubscription? @relation(fields: [enterpriseId], references: [id])
+
+  @@map("invoices")
+}
+
+// Fee Configuration
+model FeeConfiguration {
+  id              String   @id @default(cuid())
+  name            String   @unique
+  type            String   // TRANSACTION_FEE, MARKETPLACE_COMMISSION, CURRENCY_CONVERSION, COURSE_PLATFORM_FEE
+  feeType         String   // PERCENTAGE, FIXED, TIERED
+  feeValue        Decimal  // Percentage or fixed amount
+  minFee          Decimal? @default(0.00)
+  maxFee          Decimal?
+  currency        String   @default("USD")
+  conditions      String?  // JSON with conditions (volume tiers, user types, etc.)
+  isActive        Boolean  @default(true)
+  appliesTo       String?  // USER_TYPES, TRANSACTION_TYPES, CURRENCIES
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("fee_configurations")
+}
+
+// Transaction Fee Records
+model TransactionFee {
+  id              String   @id @default(cuid())
+  transactionId   String   @unique
+  userId          String
+  feeType         String   // TRANSACTION_FEE, CURRENCY_CONVERSION, MARKETPLACE_COMMISSION, COURSE_FEE
+  baseAmount      Decimal
+  feeAmount       Decimal
+  feeRate         Decimal
+  currency        String
+  description     String?
+  metadata        String?  // JSON with additional context
+  createdAt       DateTime @default(now())
+
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("transaction_fees")
+}
+
+// Usage Metrics for Analytics
+model UsageMetric {
+  id              String   @id @default(cuid())
+  userId          String?
+  enterpriseId    String?
+  metricType      String   // API_CALL, TRANSACTION, LISTING_VIEW, COURSE_ACCESS, STORAGE_USAGE
+  metricValue     Float
+  metricUnit      String   // COUNT, BYTES, SECONDS, PERCENTAGE
+  period          String   // DAILY, WEEKLY, MONTHLY
+  date            DateTime @default(now())
+  metadata        String?  // JSON with additional context
+  createdAt       DateTime @default(now())
+
+  user            User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("usage_metrics")
+}
+
+// Data Analytics Products
+model AnalyticsProduct {
+  id              String   @id @default(cuid())
+  name            String   @unique
+  description     String
+  type            String   // MARKET_INSIGHTS, TRADE_ANALYTICS, USER_BEHAVIOR, PREDICTIVE_ANALYTICS
+  price           Decimal
+  currency        String   @default("USD")
+  billingCycle    String   // ONE_TIME, MONTHLY, YEARLY
+  features        String   // JSON array of features
+  dataSources     String   // JSON with data sources included
+  updateFrequency String   // REAL_TIME, DAILY, WEEKLY, MONTHLY
+  isActive        Boolean  @default(true)
+  sortOrder       Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  purchases       AnalyticsPurchase[]
+
+  @@map("analytics_products")
+}
+
+// Analytics Purchases
+model AnalyticsPurchase {
+  id              String   @id @default(cuid())
+  productId       String
+  userId          String?
+  enterpriseId    String?
+  purchaseType    String   // INDIVIDUAL, ENTERPRISE
+  amount          Decimal
+  currency        String
+  status          String   @default("ACTIVE") // ACTIVE, EXPIRED, CANCELLED
+  startDate       DateTime @default(now())
+  endDate         DateTime?
+  accessLevel     String   // BASIC, STANDARD, PREMIUM
+  metadata        String?  // JSON with additional context
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  product         AnalyticsProduct @relation(fields: [productId], references: [id])
+  user            User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("analytics_purchases")
+}
+
+// AI Service Usage
+model AIServiceUsage {
+  id              String   @id @default(cuid())
+  userId          String?
+  enterpriseId    String?
+  serviceType     String   // TRADING_ASSISTANT, MARKET_PREDICTION, FRAUD_DETECTION, RECOMMENDATION_ENGINE
+  usageType       String   // API_CALL, ANALYSIS, TRAINING, PREDICTION
+  tokensUsed      Int      @default(0)
+  computeTime     Int      @default(0) // in seconds
+  cost            Decimal  @default(0.00)
+  currency        String   @default("USD")
+  requestId       String?  @unique
+  metadata        String?  // JSON with additional context
+  createdAt       DateTime @default(now())
+
+  user            User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("ai_service_usage")
+}
+
+// Partnership Programs
+model PartnershipProgram {
+  id              String   @id @default(cuid())
+  name            String   @unique
+  description     String
+  type            String   // REVENUE_SHARING, WHITE_LABEL, API_PARTNER, RESELLER
+  commissionRate  Decimal  // Percentage commission
+  requirements    String?  // JSON with partner requirements
+  benefits        String?  // JSON with partner benefits
+  isActive        Boolean  @default(true)
+  applicationUrl  String?
+  contactEmail    String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  partners        Partnership[]
+
+  @@map("partnership_programs")
+}
+
+// Partnerships
+model Partnership {
+  id              String   @id @default(cuid())
+  programId       String
+  partnerId       String   @unique
+  partnerName     String
+  partnerEmail    String
+  partnerType     String   // BANK, FINTECH, EDUCATIONAL, LOGISTICS, GOVERNMENT
+  status          String   @default("PENDING") // PENDING, APPROVED, ACTIVE, SUSPENDED, TERMINATED
+  commissionRate  Decimal?
+  customTerms     String?  // JSON with custom partnership terms
+  startDate       DateTime @default(now())
+  endDate         DateTime?
+  revenueGenerated Decimal @default(0.00)
+  metadata        String?  // JSON with additional context
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  program         PartnershipProgram @relation(fields: [programId], references: [id])
+
+  @@map("partnerships")
+}
+
+// Revenue Distribution
+model RevenueDistribution {
+  id              String   @id @default(cuid())
+  sourceId        String   @unique // Transaction ID, Subscription ID, etc.
+  sourceType      String   // TRANSACTION, SUBSCRIPTION, PARTNERSHIP, ADVERTISING
+  totalAmount     Decimal
+  currency        String
+  platformFee     Decimal
+  partnerShare    Decimal  @default(0.00)
+  taxAmount       Decimal  @default(0.00)
+  netAmount       Decimal
+  distributionDate DateTime @default(now())
+  metadata        String?  // JSON with distribution breakdown
+  createdAt       DateTime @default(now())
+
+  @@map("revenue_distributions")
+}
+
+// Community Features
+model CommunityPost {
+  id              String   @id @default(cuid())
+  userId          String
+  courseId        String?
+  title           String
+  content         String
+  type            String   @default("DISCUSSION") // DISCUSSION, QUESTION, RESOURCE, ANNOUNCEMENT
+  tags            String?  // JSON array of tags
+  attachments     String?  // JSON array of file URLs
+  upvotes         Int      @default(0)
+  downvotes       Int      @default(0)
+  viewCount       Int      @default(0)
+  isPinned        Boolean  @default(false)
+  isLocked        Boolean  @default(false)
+  status          String   @default("ACTIVE") // ACTIVE, HIDDEN, DELETED
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course          Course?  @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  comments        CommunityComment[]
+  votes           CommunityVote[]
+
+  @@map("community_posts")
+}
+
+// Community Comments
+model CommunityComment {
+  id              String   @id @default(cuid())
+  postId          String
+  userId          String
+  parentId        String?  // For nested comments
+  content         String
+  upvotes         Int      @default(0)
+  downvotes       Int      @default(0)
+  isAnswer        Boolean  @default(false) // For Q&A posts
+  status          String   @default("ACTIVE") // ACTIVE, HIDDEN, DELETED
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  post            CommunityPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parent          CommunityComment? @relation("CommentReplies", fields: [parentId], references: [id])
+  replies         CommunityComment[] @relation("CommentReplies")
+  votes           CommunityVote[]
+
+  @@map("community_comments")
+}
+
+// Community Votes
+model CommunityVote {
+  id              String   @id @default(cuid())
+  userId          String
+  targetType      String   // POST, COMMENT
+  targetId        String
+  voteType        String   // UPVOTE, DOWNVOTE
+  createdAt       DateTime @default(now())
+
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post            CommunityPost? @relation(fields: [targetId], references: [id], onDelete: Cascade)
+  comment         CommunityComment? @relation(fields: [targetId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, targetType, targetId])
+  @@map("community_votes")
+}
+
+// User Contributions (for community-driven content)
+model UserContribution {
+  id              String   @id @default(cuid())
+  userId          String
+  courseId        String?
+  type            String   // COURSE_SUGGESTION, CONTENT_IMPROVEMENT, TRANSLATION, RESOURCE
+  title           String
+  description     String
+  content         String?  // JSON with detailed contribution
+  status          String   @default("PENDING") // PENDING, UNDER_REVIEW, APPROVED, REJECTED, IMPLEMENTED
+  reviewedBy      String?  // Admin user ID
+  reviewNotes     String?
+  implementedBy   String?  // Admin user ID
+  implementedAt   DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course          Course?  @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@map("user_contributions")
+}
+
+// Language Learning Models
+model LanguageCourse {
+  id              String   @id @default(cuid())
+  title           String
+  description     String
+  targetLanguage  String   // Hindi, English, Mandarin, Portuguese, Russian
+  sourceLanguage  String   // Native language of learners
+  level           String   @default("BEGINNER")
+  category        String   // Business, Travel, Culture, Technical
+  instructor      String
+  duration        Int      // in hours
+  price           Float
+  originalPrice   Float?
+  thumbnail       String?
+  videoUrl        String?
+  rating          Float    @default(0)
+  reviewCount     Int      @default(0)
+  studentCount    Int      @default(0)
+  isPublished     Boolean  @default(false)
+  isFeatured      Boolean  @default(false)
+  
+  // Language-specific fields
+  focusAreas      String?   // JSON: Speaking, Reading, Writing, Listening
+  businessContext String?   // JSON: Trade, Finance, Negotiation, Culture
+  difficulty      String   @default("BEGINNER")
+  
+  // Metadata
+  tags            String?   // JSON array of tags
+  requirements    String?   // JSON array of requirements
+  outcomes        String?   // JSON array of outcomes
+  keyTopics       String?   // JSON array of main topics
+  
+  // Relations
+  lessons         LanguageLesson[]
+  enrollments     LanguageEnrollment[]
+  assessments     LanguageAssessment[]
+  certificates    LanguageCertificate[]
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("language_courses")
+}
+
+model LanguageLesson {
+  id              String   @id @default(cuid())
+  courseId        String
+  title           String
+  content         String
+  type            String   @default("TEXT") // VIDEO, AUDIO, TEXT, INTERACTIVE, QUIZ
+  duration        Int      // in minutes
+  
+  // Language-specific content
+  vocabulary      String?   // JSON: Key vocabulary words
+  phrases         String?   // JSON: Common phrases
+  culturalNotes   String?   // Cultural context
+  businessScenarios String? // JSON: Business use cases
+  
+  // Media content
+  audioUrl        String?
+  transcript      String?
+  exercises       Json?    // Interactive exercises
+  videoUrl        String?
+  
+  order           Int
+  isPublished     Boolean  @default(false)
+  isPreview       Boolean  @default(false)
+  
+  course          LanguageCourse @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  progress        LanguageProgress[]
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt()
+
+  @@map("language_lessons")
+}
+
+model LanguageEnrollment {
+  id              String   @id @default(cuid())
+  userId          String
+  courseId        String
+  enrollmentDate  DateTime @default(now())
+  completionDate  DateTime?
+  progress        Float    @default(0)
+  lastAccessed    DateTime @default(now())
+  
+  // Language learning specific
+  currentLevel    String   @default("BEGINNER")
+  timeSpent        Int      @default(0) // in minutes
+  vocabularyLearned String? // JSON array of vocabulary learned
+  phrasesLearned   String? // JSON array of phrases learned
+  
+  course          LanguageCourse @relation(fields: [courseId], references: [id])
+  user            User @relation(fields: [userId], references: [id])
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt()
+
+  @@unique([userId, courseId])
+  @@map("language_enrollments")
+}
+
+model LanguageAssessment {
+  id              String   @id @default(cuid())
+  courseId        String
+  title           String
+  description     String
+  type            String   @default("PROGRESS") // PLACEMENT, PROGRESS, FINAL, CERTIFICATION
+  
+  // Assessment content
+  questions       Json     // Array of questions with different types
+  timeLimit       Int?     // in minutes
+  passingScore    Int      // percentage
+  
+  // Language skills tested
+  skillsTested    String? // JSON: Reading, Writing, Listening, Speaking
+  
+  course          LanguageCourse @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  attempts        LanguageAttempt[]
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt()
+
+  @@map("language_assessments")
+}
+
+model LanguageAttempt {
+  id              String   @id @default(cuid())
+  userId          String
+  assessmentId    String
+  
+  // Attempt details
+  score           Int
+  maxScore        Int
+  answers         Json     // User's answers
+  timeSpent       Int      // in minutes
+  completedAt     DateTime @default(now())
+  
+  // Language-specific results
+  skillScores     Json?    // Breakdown by language skill
+  recommendations String? // JSON: Learning recommendations
+  
+  assessment      LanguageAssessment @relation(fields: [assessmentId], references: [id])
+  user            User @relation(fields: [userId], references: [id])
+  
+  createdAt       DateTime @default(now())
+
+  @@map("language_attempts")
+}
+
+model LanguageProgress {
+  id              String   @id @default(cuid())
+  userId          String
+  lessonId        String
+  courseId        String
+  
+  // Progress tracking
+  completed       Boolean  @default(false)
+  completionTime  Int?     // time spent in minutes
+  score           Int?     // quiz/exercise scores
+  
+  // Language-specific progress
+  vocabularyMastered String? // JSON: Words learned
+  phrasesMastered   String? // JSON: Phrases learned
+  skillProgress    Json?    // Progress in each skill area
+  
+  lesson          LanguageLesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  user            User @relation(fields: [userId], references: [id])
+  
+  completedAt     DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt()
+
+  @@unique([userId, lessonId])
+  @@map("language_progress")
+}
+
+model LanguageCertificate {
+  id              String   @id @default(cuid())
+  userId          String
+  courseId        String
+  certificateType String   @default("COMPLETION") // COMPLETION, ACHIEVEMENT, PROFESSIONAL
+  level           String   @default("BEGINNER")
+  
+  // Certificate details
+  issueDate       DateTime @default(now())
+  expiryDate      DateTime?
+  certificateUrl  String?
+  verificationCode String @unique @default(cuid())
+  
+  // Language proficiency
+  proficiencyLevel String // Basic, Intermediate, Advanced, Fluent
+  skillsDemonstrated String? // JSON: Reading, Writing, Listening, Speaking
+  
+  course          LanguageCourse @relation(fields: [courseId], references: [id])
+  user            User @relation(fields: [userId], references: [id])
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt()
+
+  @@map("language_certificates")
+}
+
+// Study Groups
+model StudyGroup {
+  id              String   @id @default(cuid())
+  name            String
+  description     String
+  courseId        String?
+  creatorId       String
+  maxMembers      Int      @default(50)
+  isPrivate       Boolean  @default(false)
+  joinCode        String?  @unique
+  tags            String?  // JSON array of tags
+  schedule        String?  // JSON with meeting schedule
+  status          String   @default("ACTIVE") // ACTIVE, INACTIVE, ARCHIVED
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  creator         User     @relation(fields: [creatorId], references: [id])
+  course          Course?  @relation(fields: [courseId], references: [id])
+  members         StudyGroupMember[]
+  sessions        StudySession[]
+
+  @@map("study_groups")
+}
+
+// Study Group Members
+model StudyGroupMember {
+  id              String   @id @default(cuid())
+  groupId         String
+  userId          String
+  role            String   @default("MEMBER") // ADMIN, MODERATOR, MEMBER
+  joinedAt        DateTime @default(now())
+  lastActive      DateTime @default(now())
+
+  group           StudyGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, userId])
+  @@map("study_group_members")
+}
+
+// Study Sessions
+model StudySession {
+  id              String   @id @default(cuid())
+  groupId         String
+  hostId          String
+  title           String
+  description     String?
+  scheduledFor    DateTime
+  duration        Int      @default(60) // Duration in minutes
+  meetingUrl      String?  // Video call URL
+  maxParticipants Int      @default(50)
+  status          String   @default("SCHEDULED") // SCHEDULED, LIVE, COMPLETED, CANCELLED
+  recordingUrl    String?
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  group           StudyGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  host            User     @relation(fields: [hostId], references: [id])
+  attendees       StudySessionAttendee[]
+
+  @@map("study_sessions")
+}
+
+// Study Session Attendees
+model StudySessionAttendee {
+  id              String   @id @default(cuid())
+  sessionId       String
+  userId          String
+  joinedAt        DateTime?
+  leftAt          DateTime?
+  isHost          Boolean  @default(false)
+  notes           String?
+
+  session         StudySession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, userId])
+  @@map("study_session_attendees")
+}
